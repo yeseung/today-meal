@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>오늘의 급식 - 레트로</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <style>
+      @font-face {
+        font-family: "DOSMyungjo";
+        src: url("https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_eight@1.0/DOSMyungjo.woff")
+          format("woff");
+        font-weight: normal;
+        font-style: normal;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 20px;
+        background: #c0c0c0;
+        font-family: "DOSMyungjo", monospace;
+        color: #000;
+
+        /* ✔ 세로 가운데 정렬 */
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .container {
+        width: 90%;
+        max-width: 480px;
+        background: #e5e5e5;
+        padding: 0;
+        border: 3px solid #000;
+        box-shadow: 4px 4px 0 #000;
+      }
+
+      /* --- 타이틀바 --- */
+      h2 {
+        margin: 0;
+        padding: 10px;
+        text-align: left;
+        background: #000080;
+        color: #fff;
+        font-size: 18px;
+        border-bottom: 3px solid #000;
+      }
+
+      /* --- 내부패널 --- */
+      .inner {
+        padding: 20px;
+      }
+
+      input,
+      select {
+        width: 100%;
+        padding: 10px;
+        font-size: 15px;
+        font-family: "DOSMyungjo";
+        border: 2px solid #000;
+        margin-bottom: 12px;
+        background: #fff;
+      }
+
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: #000;
+        background: #ffffcc;
+      }
+
+      /* --- 레트로 버튼 --- */
+      button {
+        width: 100%;
+        padding: 12px;
+        font-size: 16px;
+        font-family: "DOSMyungjo";
+        cursor: pointer;
+        color: #000;
+        background: #d9d9d9;
+        border: 3px solid #000;
+        box-shadow: 3px 3px 0 #000;
+      }
+
+      button:active {
+        box-shadow: 1px 1px 0 #000;
+        transform: translate(2px, 2px);
+        background: #bfbfbf;
+      }
+
+      /* --- 결과창 --- */
+      .result {
+        margin-top: 15px;
+        white-space: pre-line;
+        padding: 12px;
+        font-size: 15px;
+        border: 2px solid #000;
+        background: #fff;
+        min-height: 80px;
+      }
+
+      .result::before {
+        content: "▶ 급식 데이터";
+        display: block;
+        margin-bottom: 6px;
+        font-weight: bold;
+        color: #000080;
+      }
+
+      @media (max-width: 480px) {
+        .inner {
+          padding: 16px;
+        }
+        input,
+        select,
+        button {
+          font-size: 14px;
+          padding: 9px;
+        }
+        .result {
+          font-size: 14px;
+          padding: 10px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>오늘의 급식</h2>
+      <div class="inner">
+        <input type="text" id="schoolName" placeholder="학교 이름 입력" />
+        <select id="schoolSelect" style="display: none"></select>
+        <button id="searchBtn">급식 조회</button>
+        <div class="result" id="lunchResult">
+          점심 정보가 여기에 표시됩니다.
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const input = document.getElementById("schoolName");
+      const btn = document.getElementById("searchBtn");
+      const select = document.getElementById("schoolSelect");
+      const resultDiv = document.getElementById("lunchResult");
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const savedSchool = localStorage.getItem("lastSchool");
+        const savedCode = localStorage.getItem("schoolCode");
+        const savedEdu = localStorage.getItem("eduCode");
+
+        if (savedSchool && savedCode && savedEdu) {
+          input.value = savedSchool;
+          getLunch(savedSchool, savedCode, savedEdu);
+        }
+      });
+
+      btn.addEventListener("click", async () => {
+        const schoolName = input.value.trim();
+        if (!schoolName) return alert("학교 이름을 입력하세요");
+
+        localStorage.setItem("lastSchool", schoolName);
+        resultDiv.innerText = "학교 목록을 불러오는 중...";
+
+        const key = "6962a7e03e2b4f3e8ece1a58aacde301";
+        const schUrl = `https://open.neis.go.kr/hub/schoolInfo?KEY=${key}&Type=json&SCHUL_NM=${encodeURIComponent(
+          schoolName
+        )}`;
+        const schRes = await fetch(schUrl);
+        const schData = await schRes.json();
+
+        if (!schData.schoolInfo) {
+          resultDiv.innerText = "학교를 찾을 수 없습니다.";
+          return;
+        }
+
+        const schoolList = schData.schoolInfo[1].row;
+
+        if (schoolList.length === 1) {
+          const s = schoolList[0];
+          localStorage.setItem("schoolCode", s.SD_SCHUL_CODE);
+          localStorage.setItem("eduCode", s.ATPT_OFCDC_SC_CODE);
+          getLunch(s.SCHUL_NM, s.SD_SCHUL_CODE, s.ATPT_OFCDC_SC_CODE);
+        } else {
+          select.style.display = "block";
+          select.innerHTML = "<option value=''>학교 선택</option>";
+          schoolList.forEach((s) => {
+            const opt = document.createElement("option");
+            opt.value = `${s.SD_SCHUL_CODE}|${s.ATPT_OFCDC_SC_CODE}|${s.SCHUL_NM}`;
+            opt.textContent = `${s.SCHUL_NM} (${s.LCTN_SC_NM}, ${s.ORG_RDNMA})`;
+            select.appendChild(opt);
+          });
+
+          select.onchange = () => {
+            const val = select.value;
+            if (!val) return;
+            const [schoolCode, eduCode, schoolName] = val.split("|");
+            localStorage.setItem("schoolCode", schoolCode);
+            localStorage.setItem("eduCode", eduCode);
+            localStorage.setItem("lastSchool", schoolName);
+            getLunch(schoolName, schoolCode, eduCode);
+          };
+          resultDiv.innerText = "학교를 선택해주세요.";
+        }
+      });
+
+      async function getLunch(schoolName, schoolCode, eduOfficeCode) {
+        resultDiv.innerText = "급식을 불러오는 중...";
+        const today = new Date();
+        const tomorrow = new Date();
+        tomorrow.setDate(today.getDate() + 1);
+        const ymdToday = today.toISOString().slice(0, 10).replace(/-/g, "");
+        const ymdTomorrow = tomorrow
+          .toISOString()
+          .slice(0, 10)
+          .replace(/-/g, "");
+        const key = "6962a7e03e2b4f3e8ece1a58aacde301";
+
+        try {
+          const mealUrl = `https://open.neis.go.kr/hub/mealServiceDietInfo?KEY=${key}&Type=json&ATPT_OFCDC_SC_CODE=${eduOfficeCode}&SD_SCHUL_CODE=${schoolCode}&MLSV_FROM_YMD=${ymdToday}&MLSV_TO_YMD=${ymdTomorrow}`;
+          const mealRes = await fetch(mealUrl);
+          const mealData = await mealRes.json();
+
+          console.dir(mealData);
+
+          const meals = mealData?.mealServiceDietInfo?.[1]?.row || [];
+          const todayLunch = meals.find(
+            (m) => m.MMEAL_SC_CODE == "2" && m.MLSV_YMD == ymdToday
+          );
+          const tomorrowLunch = meals.find(
+            (m) => m.MMEAL_SC_CODE == "2" && m.MLSV_YMD == ymdTomorrow
+          );
+
+          // ✔ 칼로리 정보 가져오기
+          const calToday = todayLunch?.CAL_INFO || "정보 없음";
+          const calTomorrow = tomorrowLunch?.CAL_INFO || "정보 없음";
+
+          const format = (m) =>
+            m?.DDISH_NM.replace(/<br\/>/g, ", ").replace(/\([^)]*\)/g, "") ||
+            "정보 없음";
+
+          resultDiv.innerText =
+            `🍱 ${schoolName}\n\n` +
+            `📅 오늘 점심:\n${format(todayLunch)}\n칼로리: ${calToday}\n\n` +
+            `📅 내일 점심:\n${format(tomorrowLunch)}\n칼로리: ${calTomorrow}`;
+        } catch (e) {
+          resultDiv.innerText = "오류가 발생했습니다.";
+          console.error(e);
+        }
+      }
+    </script>
+  </body>
+</html>
